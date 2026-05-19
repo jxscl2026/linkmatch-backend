@@ -1,0 +1,5 @@
+allowBuilds:
+  '@alicloud/openapi-core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true

@@ -1,0 +1,42 @@
+# Render.com Blueprint - Infrastructure as Code
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: linkmatch-api
+    runtime: node
+    plan: starter
+    buildCommand: |
+      npm install -g pnpm &&
+      pnpm install &&
+      npx prisma generate &&
+      pnpm build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: linkmatch-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALIYUN_ACCESS_KEY_ID
+        sync: false
+      - key: ALIYUN_ACCESS_KEY_SECRET
+        sync: false
+      - key: ALIYUN_SMS_SIGN_NAME
+        sync: false
+      - key: ALIYUN_SMS_TEMPLATE_CODE
+        sync: false
+    healthCheckPath: /api/health
+
+databases:
+  - name: linkmatch-db
+    plan: starter
+    databaseName: linkmatch
+    postgresMajorVersion: 16

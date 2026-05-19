@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== 用户系统 ====================
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  avatar        String?
+  role          String   @default("demander") // "enterprise" | "provider" | "demander"
+  phone         String?  @unique
+  email         String?  @unique
+  wechatOpenId  String?  @unique
+  password      String?  // bcrypt hashed
+  creditScore   Int      @default(80)
+  company       String?
+  title         String?
+  bio           String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  projects      Project[]
+  skills        Skill[]
+  sentMessages  Message[]       @relation("MessageSender")
+  conversations ConversationParticipant[]
+  matchesFrom   MatchRecord[]   @relation("MatchFrom")
+  matchesTo     MatchRecord[]   @relation("MatchTo")
+  shareTokens   ShareToken[]
+}
+
+// ==================== 需求 (Project) ====================
+model Project {
+  id           String   @id @default(uuid())
+  title        String
+  description  String
+  budgetMin    Int
+  budgetMax    Int
+  currency     String   @default("¥")
+  deadline     DateTime?
+  status       String   @default("published") // "published" | "matching" | "negotiating" | "confirmed" | "completed" | "stalled"
+  category     String
+  tags         String[]
+  requirements String[]
+  background   String?
+  acceptance   String?
+  skillTypes   String[]
+  resources    String[]
+  location     String?
+  viewCount    Int      @default(0)
+  matchCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  publisherId  String
+  publisher    User     @relation(fields: [publisherId], references: [id])
+
+  matchRecords MatchRecord[] @relation("MatchProject")
+  conversations Conversation[] @relation("ConversationProject")
+  shareTokens  ShareToken[]   @relation("ShareProject")
+
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==================== 技能/服务 (Skill) ====================
+model Skill {
+  id           String   @id @default(uuid())
+  name         String
+  solution     String
+  cases        Json     @default("[]") // Array of {id, title, description}
+  priceType    String   @default("range") // "range" | "fixed" | "daily"
+  priceMin     Int?
+  priceMax     Int?
+  currency     String   @default("¥")
+  teamIntro    String?
+  teamSize     Int?
+  tags         String[]
+  category     String
+  industries   String[]
+  scenarios    String[]
+  status       String   @default("published") // same as Project status
+  location     String?
+  viewCount    Int      @default(0)
+  matchCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  publisherId  String
+  publisher    User     @relation(fields: [publisherId], references: [id])
+
+  matchRecords MatchRecord[] @relation("MatchSkill")
+  conversations Conversation[] @relation("ConversationSkill")
+  shareTokens  ShareToken[]   @relation("ShareSkill")
+
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==================== 匹配记录 ====================
+model MatchRecord {
+  id          String   @id @default(uuid())
+  score       Float    // 0.0 - 1.0
+  status      String   @default("recommended") // "recommended" | "interested" | "rejected" | "expired"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String?
+  project     Project? @relation("MatchProject", fields: [projectId], references: [id])
+
+  skillId     String?
+  skill       Skill?   @relation("MatchSkill", fields: [skillId], references: [id])
+
+  fromUserId  String
+  fromUser    User     @relation("MatchFrom", fields: [fromUserId], references: [id])
+
+  toUserId    String
+  toUser      User     @relation("MatchTo", fields: [toUserId], references: [id])
+
+  @@index([projectId])
+  @@index([skillId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+// ==================== 会话 ====================
+model Conversation {
+  id            String   @id @default(uuid())
+  status        String   @default("active") // "active" | "confirmed" | "completed" | "stalled"
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Related project or skill
+  projectId     String?
+  project       Project? @relation("ConversationProject", fields: [projectId], references: [id])
+
+  skillId       String?
+  skill         Skill?   @relation("ConversationSkill", fields: [skillId], references: [id])
+
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id              String   @id @default(uuid())
+  unreadCount     Int      @default(0)
+  joinedAt        DateTime @default(now())
+
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+}
+
+// ==================== 消息 ====================
+model Message {
+  id              String   @id @default(uuid())
+  content         String
+  type            String   @default("text") // "text" | "image" | "card" | "system"
+  cardData        Json?    // For card type messages
+  createdAt       DateTime @default(now())
+
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+
+  senderId        String
+  sender          User     @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+}
+
+// ==================== 分享令牌 ====================
+model ShareToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  type        String   // "project" | "skill"
+  viewCount   Int      @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  projectId   String?
+  project     Project? @relation("ShareProject", fields: [projectId], references: [id])
+
+  skillId     String?
+  skill       Skill?   @relation("ShareSkill", fields: [skillId], references: [id])
+
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id])
+
+  @@index([token])
+}
+
+// ==================== 短信验证码 (可选, 也可用Redis) ====================
+model SmsCode {
+  id        String   @id @default(uuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+}
